@@ -1,0 +1,161 @@
+Note :-
+In CloudFormation, you can only write 3 level of nested rule statements max. This is because CloudFormation does not allow recursive operation.
+You may need to reduce or optimize nested statements that you may have (e.g. NOT(A AND B) instead of NOT(A) AND NOT(B)), or use custom resources functionality.
+
+==> This is a snippet that you can reference to for associating web ACL to ALB.
+
+## Associate WAFv2 Web ACL with a load balancer
+## Alb = AWS::ElasticLoadBalancingV2::LoadBalancer
+## webACL = AWS::WAFv2::WebACL
+
+  wafALBAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: 
+        !Sub 
+          - 'arn:aws:elasticloadbalancing:${AWS::Region}:${AWS::AccountId}:loadbalancer/${TargetALB}'
+          - TargetALB: !GetAtt Alb.LoadBalancerFullName
+      WebACLArn: !GetAtt wafACL.Arn
+
+===============================================================================================
+
+==> This will create a web ACL with AWS Managed Ruleset (Common Rule Set) enabled and exluding a rule inside it.
+
+Description: This will create a web ACL with AWS Managed Ruleset (Common Rule Set) enabled and exluding a rule inside it.
+
+Resources:
+  WebACLWithAMR:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: WebACLWithAMR
+      Scope: REGIONAL
+      Description: This is a demo web ACL with AWS Managed Rules
+      DefaultAction: 
+        Block: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: MetricForWebACLWithAMR
+      Tags:
+        - Key: sampleapple
+          Value: sampleorange
+      Rules: 
+        - Name: AWS-AWSManagedRulesCommonRuleSet
+          Priority: 0
+          OverrideAction:
+            None: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: MetricForAMRCRS
+          Statement:
+            ManagedRuleGroupStatement:
+              VendorName: AWS
+              Name: AWSManagedRulesCommonRuleSet
+              ExcludedRules:
+                - Name: NoUserAgent_HEADER
+  
+
+
+============================================================================
+
+==> This will create a web ACL with block rule having IP set and string match for excluding specific host domain.
+
+Description: This will create a web ACL with block rule having IP set and string match for excluding specific host domain.
+
+Resources:
+  TestWebACLForCFN:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: TestWebACLForCFN
+      Scope: REGIONAL
+      Description: WebACL CloudFormation Test
+      DefaultAction:
+        Block: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: TestWebACLForCFNMetric          
+      
+      Rules:
+        - Name: IPSetWithException
+          Priority: 1
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: IPSetWithExceptionMetric
+          Statement:
+            AndStatement:
+              Statements:          
+              - IPSetReferenceStatement:
+                  ARN: arn:aws:wafv2:us-east-1:<aws-id>:regional/ipset/<name>/<id>
+              - NotStatement:
+                  Statement:    
+                    ByteMatchStatement:
+                      FieldToMatch:
+                        SingleHeader:
+                          Name: host
+                      PositionalConstraint: EXACTLY
+                      SearchString: dev.appleorange.com
+                      TextTransformations:
+                      - Type: NONE
+                        Priority: 0
+
+
+
+==============================================================================================
+
+==> This will create a web ACL with block rule having XSS detection on query string and string match for excluding specific pattern.
+
+
+Description: This will create a web ACL with block rule having XSS detection on query string and string match for excluding specific pattern.
+
+Resources:
+  TestWebACLForCFN:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: TestWebACLForCFN
+      Scope: REGIONAL
+      Description: WebACL CloudFormation Test For XSS Exclude
+      DefaultAction:
+        Block: {}
+      VisibilityConfig:
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: TestWebACLForCFNMetric          
+      
+      Rules:
+        - Name: XSSWithException
+          Priority: 1
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: XSSWithExceptionMetric
+          Statement:
+            AndStatement:
+              Statements:          
+              - XssMatchStatement:
+                  FieldToMatch:
+                    QueryString: {}
+                  TextTransformations:
+                    - Priority: 1
+                      Type: URL_DECODE
+                    - Priority: 2
+                      Type: HTML_ENTITY_DECODE
+              - NotStatement:
+                  Statement:    
+                    ByteMatchStatement:
+                      FieldToMatch:
+                        QueryString: {}
+                      PositionalConstraint: CONTAINS
+                      SearchString: on=
+                      TextTransformations:
+                      - Type: NONE
+                        Priority: 0
+
+
+
